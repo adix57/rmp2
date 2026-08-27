@@ -1,0 +1,9 @@
+plan.md
+
+
+# Added by cargo
+
+/target
+*.mp3
+*.m4a
+*.m3u
