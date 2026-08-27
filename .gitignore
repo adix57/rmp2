@@ -3,6 +3,21 @@ todo.md
 *.mp3
 *.m4a
 *.m3u
+*.m3u8
+*.pls
+*.flac
+*.ogg
+*.opus
+*.aac
+*.wav
+
+# rmp runtime files
+library.sqlite3
+last-state.json
+rmp.sock
+rmp.pid
+mpv.sock
+rmp.log
 
 # Added by cargo
 
