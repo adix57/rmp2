@@ -163,7 +163,7 @@ impl Form {
             mode: FormMode::Add,
             fields: vec![
                 Field::new("uri", ""),
-                Field::new("name", ""),
+                Field::new("title", ""),
                 Field::new("tags", ""),
             ],
             focus: 0,
