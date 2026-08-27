@@ -187,12 +187,12 @@ impl App {
             Some(Action::Activate) => match self.section {
                 Section::Queue => self.play_cursor(),
                 Section::Filter => self.toggle_tag_cursor(),
-                Section::State => {}
+                Section::Info => {}
             },
             Some(Action::Toggle) => match self.section {
                 Section::Queue => self.connection.send(Command::PlayPause),
                 Section::Filter => self.toggle_tag_cursor(),
-                Section::State => {}
+                Section::Info => {}
             },
             Some(Action::NextTrack) => self.connection.send(Command::Next),
             Some(Action::PrevTrack) => self.connection.send(Command::Prev),
@@ -310,7 +310,7 @@ impl App {
                 self.tag_cursor =
                     (self.tag_cursor as i64 + delta).clamp(0, len as i64 - 1) as usize;
             }
-            Section::State => {}
+            Section::Info => {}
         }
     }
 
@@ -367,8 +367,7 @@ impl App {
                     frame,
                     state,
                     s.selected.as_ref(),
-                    s.now.as_ref(),
-                    self.section == Section::State,
+                    self.section == Section::Info,
                 );
                 let msg = self
                     .msg

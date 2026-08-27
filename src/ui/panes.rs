@@ -10,22 +10,22 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
 pub enum Section {
     Filter,
     Queue,
-    State,
+    Info,
 }
 
 impl Section {
     pub fn next(self) -> Self {
         match self {
             Section::Filter => Section::Queue,
-            Section::Queue => Section::State,
-            Section::State => Section::Filter,
+            Section::Queue => Section::Info,
+            Section::Info => Section::Filter,
         }
     }
     pub fn prev(self) -> Self {
         match self {
-            Section::Filter => Section::State,
+            Section::Filter => Section::Info,
             Section::Queue => Section::Filter,
-            Section::State => Section::Queue,
+            Section::Info => Section::Queue,
         }
     }
 }
@@ -145,16 +145,9 @@ pub fn queue_pane(
     frame.render_widget(list, area);
 }
 
-pub fn state_pane(
-    frame: &mut Frame,
-    area: Rect,
-    selected: Option<&MediaInfo>,
-    now: Option<&NowPlaying>,
-    focused: bool,
-) {
+pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, focused: bool) {
     let mut lines = Vec::new();
     if let Some(m) = selected {
-        let live = now.filter(|n| n.id == m.id);
         let name_style = if focused {
             Style::default()
                 .add_modifier(Modifier::BOLD)
@@ -175,19 +168,7 @@ pub fn state_pane(
         if let Some(s) = &m.source {
             lines.push(Line::from(format!("Source:    {s}")));
         }
-        if let Some(n) = live {
-            lines.push(Line::from(format!(
-                "Position:  {} / {}",
-                fmt_time(n.position),
-                n.duration.map(fmt_time).unwrap_or_else(|| "--:--".into())
-            )));
-            let w = area.width.saturating_sub(15) as usize;
-            lines.push(Line::from(progress_bar(
-                n.position,
-                n.duration.unwrap_or(0.0),
-                w,
-            )));
-        } else if let Some(d) = m.duration {
+        if let Some(d) = m.duration {
             lines.push(Line::from(format!("Duration:  {}", fmt_time(d))));
         }
         if let Some(b) = m.bitrate {
@@ -200,7 +181,7 @@ pub fn state_pane(
         lines.push(Line::from("Nothing selected"));
     }
     let para = Paragraph::new(lines)
-        .block(frame_block("State", focused))
+        .block(frame_block("Info", focused))
         .wrap(Wrap { trim: false });
     frame.render_widget(para, area);
 }
