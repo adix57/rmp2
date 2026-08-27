@@ -258,23 +258,21 @@ impl App {
 
     fn apply_form(&mut self, cmd: FormCommand) {
         match cmd {
-            FormCommand::Add { uri, name, tags } => {
+            FormCommand::Add { uri, title, tags } => {
                 self.connection.send(Command::Add {
                     uri,
-                    name: if name.is_empty() { None } else { Some(name) },
+                    title: if title.is_empty() { None } else { Some(title) },
                     tags,
                 });
             }
             FormCommand::Update {
                 id,
-                name,
                 title,
                 artist,
                 tags,
             } => {
                 self.connection.send(Command::Update {
                     id,
-                    name,
                     title: if title.is_empty() { None } else { Some(title) },
                     artist: if artist.is_empty() {
                         None
@@ -335,7 +333,7 @@ impl App {
     fn render(&mut self, frame: &mut ratatui::Frame) {
         let area = frame.area();
         let [main, status] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).areas(area);
+            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
         let [filter, queue, state] = Layout::horizontal([
             Constraint::Ratio(1, 4),
             Constraint::Ratio(2, 4),

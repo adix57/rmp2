@@ -33,9 +33,8 @@ pub fn classify_uri(uri: &str) -> (&'static str, Option<String>) {
 
 pub struct NewMedia<'a> {
     pub uri: &'a str,
-    pub name: &'a str,
-    pub kind: &'a str,
     pub title: Option<&'a str>,
+    pub kind: &'a str,
     pub artist: Option<&'a str>,
     pub duration: Option<f64>,
     pub bitrate: Option<u64>,
@@ -56,7 +55,6 @@ impl Library {
              CREATE TABLE IF NOT EXISTS media (
                  id INTEGER PRIMARY KEY AUTOINCREMENT,
                  uri TEXT NOT NULL UNIQUE,
-                 name TEXT NOT NULL,
                  kind TEXT NOT NULL DEFAULT 'offline',
                  title TEXT,
                  artist TEXT,
@@ -76,7 +74,22 @@ impl Library {
              );
              CREATE INDEX IF NOT EXISTS idx_media_tags_tag ON media_tags(tag_id);",
         )?;
+        self.drop_legacy_name()?;
         let _ = self.ensure_tag(FAVORITE_TAG)?;
+        Ok(())
+    }
+
+    fn drop_legacy_name(&self) -> Result<(), rusqlite::Error> {
+        let mut stmt = self.conn.prepare("PRAGMA table_info(media)")?;
+        let cols: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(1))?
+            .collect::<Result<_, _>>()?;
+        if cols.iter().any(|c| c == "name") {
+            self.conn.execute_batch(
+                "UPDATE media SET title = name WHERE title IS NULL OR trim(title) = '';
+                 ALTER TABLE media DROP COLUMN name;",
+            )?;
+        }
         Ok(())
     }
 
@@ -122,10 +135,9 @@ impl Library {
 
     pub fn add_media(&mut self, m: NewMedia<'_>, tags: &[String]) -> Result<i64, rusqlite::Error> {
         self.conn.execute(
-            "INSERT INTO media(uri, name, kind, title, artist, duration, bitrate, source, added_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "INSERT INTO media(uri, kind, title, artist, duration, bitrate, source, added_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(uri) DO UPDATE SET
-                 name = excluded.name,
                  kind = excluded.kind,
                  title = excluded.title,
                  artist = excluded.artist,
@@ -135,7 +147,6 @@ impl Library {
                  added_at = excluded.added_at",
             params![
                 m.uri,
-                m.name,
                 m.kind,
                 m.title,
                 m.artist,
@@ -158,14 +169,13 @@ impl Library {
     pub fn update_media(
         &mut self,
         id: i64,
-        name: &str,
         title: Option<&str>,
         artist: Option<&str>,
         tags: &[String],
     ) -> Result<(), rusqlite::Error> {
         self.conn.execute(
-            "UPDATE media SET name = ?2, title = ?3, artist = ?4 WHERE id = ?1",
-            params![id, name, title, artist],
+            "UPDATE media SET title = ?2, artist = ?3 WHERE id = ?1",
+            params![id, title, artist],
         )?;
         self.set_tags(id, tags)?;
         Ok(())
@@ -183,13 +193,12 @@ impl Library {
         Ok(MediaInfo {
             id,
             uri: row.get(1)?,
-            name: row.get(2)?,
-            kind: row.get(3)?,
-            title: row.get(4)?,
-            artist: row.get(5)?,
-            duration: row.get(6)?,
-            bitrate: row.get(7)?,
-            source: row.get(8)?,
+            kind: row.get(2)?,
+            title: row.get(3)?,
+            artist: row.get(4)?,
+            duration: row.get(5)?,
+            bitrate: row.get(6)?,
+            source: row.get(7)?,
             favorite: tags.iter().any(|t| t == FAVORITE_TAG),
             tags,
         })
@@ -198,7 +207,7 @@ impl Library {
     pub fn media(&mut self, id: i64) -> Result<Option<MediaInfo>, rusqlite::Error> {
         self.conn
             .query_row(
-                "SELECT id, uri, name, kind, title, artist, duration, bitrate, source
+                "SELECT id, uri, kind, title, artist, duration, bitrate, source
                  FROM media WHERE id = ?1",
                 params![id],
                 |r| self.row_to_media(r),
@@ -208,7 +217,7 @@ impl Library {
 
     pub fn all_media(&mut self) -> Result<Vec<MediaInfo>, rusqlite::Error> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, uri, name, kind, title, artist, duration, bitrate, source
+            "SELECT id, uri, kind, title, artist, duration, bitrate, source
              FROM media ORDER BY added_at DESC",
         )?;
         let rows = stmt.query_map([], |r| self.row_to_media(r))?;
@@ -303,16 +312,15 @@ mod tests {
     fn roundtrip_media() {
         let dir = std::env::temp_dir().join(format!("rmp-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let db = dir.join("t.sqlite3");
+        let db = dir.join("roundtrip.sqlite3");
         let _ = std::fs::remove_file(&db);
         let mut lib = Library::open(&db).unwrap();
         let id = lib
             .add_media(
                 NewMedia {
                     uri: "/tmp/a.mp3",
-                    name: "A Song",
-                    kind: "offline",
                     title: Some("A Song"),
+                    kind: "offline",
                     artist: Some("Artist"),
                     duration: Some(220.0),
                     bitrate: Some(128_000),
@@ -322,7 +330,7 @@ mod tests {
             )
             .unwrap();
         let m = lib.media(id).unwrap().unwrap();
-        assert_eq!(m.name, "A Song");
+        assert_eq!(m.title.as_deref(), Some("A Song"));
         assert!(m.tags.contains(&"rock".into()));
         assert!(m.tags.contains(&"favorite".into()));
 
@@ -330,10 +338,10 @@ mod tests {
         let m = lib.media(id).unwrap().unwrap();
         assert!(!m.favorite);
 
-        lib.update_media(id, "New Name", Some("T"), Some("Ar"), &["jazz".into()])
+        lib.update_media(id, Some("T"), Some("Ar"), &["jazz".into()])
             .unwrap();
         let m = lib.media(id).unwrap().unwrap();
-        assert_eq!(m.name, "New Name");
+        assert_eq!(m.title.as_deref(), Some("T"));
         assert_eq!(m.tags, vec!["jazz".to_string()]);
 
         let all = lib.all_media().unwrap();
@@ -357,9 +365,8 @@ mod tests {
             .add_media(
                 NewMedia {
                     uri: "/x.mp3",
-                    name: "One",
+                    title: Some("One"),
                     kind: "offline",
-                    title: None,
                     artist: None,
                     duration: None,
                     bitrate: None,
@@ -372,9 +379,8 @@ mod tests {
             .add_media(
                 NewMedia {
                     uri: "/x.mp3",
-                    name: "Two",
+                    title: Some("Two"),
                     kind: "offline",
-                    title: None,
                     artist: None,
                     duration: None,
                     bitrate: None,
@@ -385,7 +391,42 @@ mod tests {
             .unwrap();
         assert_eq!(id1, id2);
         let m = lib.media(id1).unwrap().unwrap();
-        assert_eq!(m.name, "Two");
+        assert_eq!(m.title.as_deref(), Some("Two"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migrates_legacy_name_column() {
+        let dir = std::env::temp_dir().join(format!("rmp-test3-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("legacy.sqlite3");
+        let _ = std::fs::remove_file(&db);
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE media (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 uri TEXT NOT NULL UNIQUE,
+                 name TEXT NOT NULL,
+                 kind TEXT NOT NULL DEFAULT 'offline',
+                 title TEXT,
+                 artist TEXT,
+                 duration REAL,
+                 bitrate INTEGER,
+                 source TEXT,
+                 added_at INTEGER NOT NULL
+             );
+             INSERT INTO media(uri, name, title, added_at)
+             VALUES ('/a.mp3', 'legacy name', NULL, 1);
+             INSERT INTO media(uri, name, title, added_at)
+             VALUES ('/b.mp3', 'legacy Two', NULL, 2);",
+        )
+        .unwrap();
+        drop(conn);
+        let mut lib = Library::open(&db).unwrap();
+        let m = lib.media(1).unwrap().unwrap();
+        assert_eq!(m.title.as_deref(), Some("legacy name"));
+        let m = lib.media(2).unwrap().unwrap();
+        assert_eq!(m.title.as_deref(), Some("legacy Two"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

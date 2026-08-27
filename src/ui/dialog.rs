@@ -110,12 +110,11 @@ pub fn search_box(frame: &mut Frame, area: Rect, search: &Search, count: usize, 
 pub enum FormCommand {
     Add {
         uri: String,
-        name: String,
+        title: String,
         tags: Vec<String>,
     },
     Update {
         id: i64,
-        name: String,
         title: String,
         artist: String,
         tags: Vec<String>,
@@ -176,7 +175,6 @@ impl Form {
         Form {
             mode: FormMode::Edit { id: m.id },
             fields: vec![
-                Field::new("name", &m.name),
                 Field::new("title", m.title.as_deref().unwrap_or("")),
                 Field::new("artist", m.artist.as_deref().unwrap_or("")),
                 Field::new("tags", &m.tags.join(", ")),
@@ -190,7 +188,7 @@ impl Form {
     fn tags_index(&self) -> usize {
         match self.mode {
             FormMode::Add => 2,
-            FormMode::Edit { .. } => 3,
+            FormMode::Edit { .. } => 2,
         }
     }
 
@@ -316,14 +314,13 @@ impl Form {
         match self.mode {
             FormMode::Add => FormCommand::Add {
                 uri: self.fields[0].value.trim().to_string(),
-                name: self.fields[1].value.trim().to_string(),
+                title: self.fields[1].value.trim().to_string(),
                 tags: self.tag_tokens(),
             },
             FormMode::Edit { id } => FormCommand::Update {
                 id,
-                name: self.fields[0].value.trim().to_string(),
-                title: self.fields[1].value.trim().to_string(),
-                artist: self.fields[2].value.trim().to_string(),
+                title: self.fields[0].value.trim().to_string(),
+                artist: self.fields[1].value.trim().to_string(),
                 tags: self.tag_tokens(),
             },
         }

@@ -507,17 +507,16 @@ impl Daemon {
                 self.search = pattern.filter(|p| !p.is_empty());
                 self.push();
             }
-            Command::Add { uri, name, tags } => self.add_media(uri, name, tags),
+            Command::Add { uri, title, tags } => self.add_media(uri, title, tags),
             Command::Update {
                 id,
-                name,
                 title,
                 artist,
                 tags,
             } => {
                 if let Err(e) =
                     self.lib
-                        .update_media(id, &name, title.as_deref(), artist.as_deref(), &tags)
+                        .update_media(id, title.as_deref(), artist.as_deref(), &tags)
                 {
                     self.log(&format!("update error: {e}"));
                     self.notify = Some("update failed".into());
@@ -551,7 +550,7 @@ impl Daemon {
         }
     }
 
-    fn add_media(&mut self, uri: String, name: Option<String>, tags: Vec<String>) {
+    fn add_media(&mut self, uri: String, title: Option<String>, tags: Vec<String>) {
         let uri = uri.trim().to_string();
         if uri.is_empty() {
             self.notify = Some("uri cannot be empty".into());
@@ -564,15 +563,9 @@ impl Daemon {
             self.push();
             return;
         }
-        let name = name
+        let title = title
             .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| {
-                Path::new(&uri)
-                    .file_name()
-                    .map(|f| f.to_string_lossy().into_owned())
-                    .unwrap_or_else(|| uri.clone())
-            });
+            .filter(|s| !s.is_empty());
         let tags: Vec<String> = {
             let mut seen = vec![];
             for t in tags {
@@ -583,7 +576,7 @@ impl Daemon {
             }
             seen
         };
-        let (title, artist, duration, bitrate) = if kind == "offline" {
+        let (probe_title, artist, duration, bitrate) = if kind == "offline" {
             let probe = probe_path();
             let res = probe_metadata(&self.cfg.mpv_binary, &probe, &uri);
             let _ = fs::remove_file(&probe);
@@ -591,12 +584,12 @@ impl Daemon {
         } else {
             (None, None, None, None)
         };
+        let title = title.or(probe_title);
         match self.lib.add_media(
             crate::db::NewMedia {
                 uri: &uri,
-                name: &name,
-                kind,
                 title: title.as_deref(),
+                kind,
                 artist: artist.as_deref(),
                 duration,
                 bitrate,
@@ -605,8 +598,13 @@ impl Daemon {
             &tags,
         ) {
             Ok(id) => {
-                self.log(&format!("added media {id}: {name}"));
-                self.notify = Some(format!("added: {name}"));
+                let display = title
+                    .as_deref()
+                    .filter(|t| !t.trim().is_empty())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| uri.clone());
+                self.log(&format!("added media {id}: {display}"));
+                self.notify = Some(format!("added: {display}"));
                 if self.selected.is_none() {
                     self.selected = Some(id);
                 }

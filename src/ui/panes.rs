@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::proto::{MediaInfo, NowPlaying, RepeatMode, Snapshot, TagInfo};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Rect};
@@ -55,10 +57,15 @@ fn frame_block(title: &str, focused: bool) -> Block<'static> {
 }
 
 fn display_name(m: &MediaInfo) -> String {
-    match (&m.title, &m.name) {
-        (Some(t), _) if !t.trim().is_empty() => t.clone(),
-        _ => m.name.clone(),
+    if let Some(t) = &m.title
+        && !t.trim().is_empty()
+    {
+        return t.clone();
     }
+    Path::new(&m.uri)
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_else(|| m.uri.clone())
 }
 
 fn fmt_time(secs: f64) -> String {
@@ -144,12 +151,15 @@ pub fn queue_pane(
 pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, focused: bool) {
     let mut lines = Vec::new();
     if let Some(m) = selected {
+        lines.push(Line::from(format!("Title:     {}", display_name(m))));
         if let Some(a) = m.artist.as_ref().filter(|a| !a.trim().is_empty()) {
             lines.push(Line::from(format!("Artist:    {a}")));
         }
-        if let Some(t) = m.title.as_ref().filter(|t| !t.trim().is_empty()) {
-            lines.push(Line::from(format!("Title:     {t}")));
-        }
+        let sep_w = area.width.saturating_sub(2) as usize;
+        lines.push(Line::from(Span::styled(
+            "-".repeat(sep_w),
+            Style::default().fg(Color::DarkGray),
+        )));
         lines.push(Line::from(format!("Type:      {}", m.kind)));
         if let Some(s) = &m.source {
             lines.push(Line::from(format!("Source:    {s}")));
@@ -161,7 +171,13 @@ pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, f
             lines.push(Line::from(format!("Bitrate:   {} bps", b)));
         }
         if !m.tags.is_empty() {
-            lines.push(Line::from(format!("Tags:      {}", m.tags.join(", "))));
+            lines.push(Line::from(Span::styled(
+                "-".repeat(sep_w),
+                Style::default().fg(Color::DarkGray),
+            )));
+            for t in &m.tags {
+                lines.push(Line::from(format!("- {t}")));
+            }
         }
     } else {
         lines.push(Line::from("Nothing selected"));
@@ -173,9 +189,9 @@ pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, f
 }
 
 pub fn status_bar(frame: &mut Frame, area: Rect, snap: &Snapshot, msg: Option<&str>) {
-    let mut spans: Vec<Span> = Vec::new();
+    let mut left: Vec<Span> = Vec::new();
     if let Some(text) = msg {
-        spans.push(Span::styled(
+        left.push(Span::styled(
             text,
             Style::default()
                 .fg(Color::Yellow)
@@ -188,38 +204,48 @@ pub fn status_bar(frame: &mut Frame, area: Rect, snap: &Snapshot, msg: Option<&s
             .find(|m| m.id == n.id)
             .map(display_name)
             .unwrap_or_else(|| "unknown".into());
-        spans.push(Span::styled(title, Style::default().fg(Color::Green)));
         let dur = n.duration.unwrap_or(0.0);
-        spans.push(Span::raw(format!(
-            "  {} / {} ",
+        left.push(Span::raw(format!(
+            "{} / {} ",
             fmt_time(n.position),
             fmt_time(dur)
         )));
         let w = area.width.saturating_sub(46) as usize;
-        spans.push(Span::raw(progress_bar(n.position, dur, w.min(20))));
+        left.push(Span::raw(progress_bar(n.position, dur, w.min(20))));
+        left.push(Span::styled(
+            format!(" {title}"),
+            Style::default().fg(Color::Green),
+        ));
     } else {
-        spans.push(Span::raw("stopped"));
+        left.push(Span::raw("stopped"));
     }
-    let volume = format!("  vol {:>3}", snap.volume);
-    spans.push(Span::raw(volume));
+    let lbl = Style::default().fg(Color::Yellow);
+    let mut right: Vec<Span> = Vec::new();
+    right.push(Span::raw("  "));
+    right.push(Span::styled("vol", lbl));
+    right.push(Span::raw(format!(" {:>3}", snap.volume)));
     let rep = match snap.repeat {
-        RepeatMode::Off => "rep off",
-        RepeatMode::All => "rep all",
-        RepeatMode::One => "rep one",
+        RepeatMode::Off => "off",
+        RepeatMode::All => "all",
+        RepeatMode::One => "one",
     };
-    spans.push(Span::raw(format!("  {rep}")));
-    spans.push(Span::raw(if snap.shuffle {
-        "  shf on"
-    } else {
-        "  shf off"
-    }));
+    right.push(Span::raw("  "));
+    right.push(Span::styled("rep", lbl));
+    right.push(Span::raw(format!(" {rep}")));
+    right.push(Span::raw("  "));
+    right.push(Span::styled("shf", lbl));
+    right.push(Span::raw(if snap.shuffle { " on" } else { " off" }));
     if let Some(tags) = snap.tags.iter().find(|t| t.checked) {
-        spans.push(Span::raw(format!("  tags:{}", tags.name)));
+        right.push(Span::raw("  "));
+        right.push(Span::styled("tags", lbl));
+        right.push(Span::raw(format!(":{}", tags.name)));
     }
-    let para = Paragraph::new(Line::from(spans)).block(
-        Block::default()
-            .borders(Borders::TOP)
-            .border_set(ASCII_BORDER),
-    );
+    let left_w: usize = left.iter().map(|s| s.content.chars().count()).sum();
+    let right_w: usize = right.iter().map(|s| s.content.chars().count()).sum();
+    let gap = area.width.saturating_sub((left_w + right_w) as u16) as usize;
+    let mut spans = left;
+    spans.push(Span::raw(" ".repeat(gap)));
+    spans.extend(right);
+    let para = Paragraph::new(Line::from(spans));
     frame.render_widget(para, area);
 }

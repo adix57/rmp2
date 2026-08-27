@@ -24,7 +24,6 @@ impl RepeatMode {
 pub struct MediaInfo {
     pub id: i64,
     pub uri: String,
-    pub name: String,
     pub kind: String,
     pub title: Option<String>,
     pub artist: Option<String>,
@@ -96,12 +95,11 @@ pub enum Command {
     },
     Add {
         uri: String,
-        name: Option<String>,
+        title: Option<String>,
         tags: Vec<String>,
     },
     Update {
         id: i64,
-        name: String,
         title: Option<String>,
         artist: Option<String>,
         tags: Vec<String>,

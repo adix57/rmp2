@@ -9,7 +9,6 @@ pub fn search_blob(m: &MediaInfo) -> String {
     if let Some(a) = &m.artist {
         parts.push(a.to_lowercase());
     }
-    parts.push(m.name.to_lowercase());
     parts.push(m.uri.to_lowercase());
     for t in &m.tags {
         parts.push(t.to_lowercase());
@@ -105,13 +104,12 @@ impl Default for Lcg {
 mod tests {
     use super::*;
 
-    fn media(id: i64, name: &str, tags: &[&str]) -> MediaInfo {
+    fn media(id: i64, title: &str, tags: &[&str]) -> MediaInfo {
         MediaInfo {
             id,
-            uri: name.to_string(),
-            name: name.to_string(),
+            uri: title.to_string(),
             kind: "offline".into(),
-            title: None,
+            title: Some(title.to_string()),
             artist: None,
             duration: None,
             bitrate: None,
