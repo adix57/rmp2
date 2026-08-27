@@ -335,7 +335,7 @@ impl App {
     fn render(&mut self, frame: &mut ratatui::Frame) {
         let area = frame.area();
         let [main, status] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(area);
+            Layout::vertical([Constraint::Min(0), Constraint::Length(2)]).areas(area);
         let [filter, queue, state] = Layout::horizontal([
             Constraint::Ratio(1, 4),
             Constraint::Ratio(2, 4),

@@ -638,7 +638,7 @@ impl Daemon {
         let now = self.now_id.map(|id| NowPlaying {
             id,
             position: self.position,
-            duration: None,
+            duration: all.iter().find(|m| m.id == id).and_then(|m| m.duration),
             paused: self.paused,
         });
         Snapshot {
