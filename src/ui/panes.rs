@@ -61,10 +61,6 @@ fn display_name(m: &MediaInfo) -> String {
     }
 }
 
-fn gap() -> Line<'static> {
-    Line::from("")
-}
-
 fn fmt_time(secs: f64) -> String {
     if !secs.is_finite() || secs < 0.0 {
         return "--:--".to_string();
@@ -148,16 +144,6 @@ pub fn queue_pane(
 pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, focused: bool) {
     let mut lines = Vec::new();
     if let Some(m) = selected {
-        let name_style = if focused {
-            Style::default()
-                .add_modifier(Modifier::BOLD)
-                .fg(Color::Cyan)
-        } else {
-            Style::default()
-        };
-        let name = display_name(m);
-        lines.push(Line::styled(name, name_style));
-        lines.push(gap());
         if let Some(a) = m.artist.as_ref().filter(|a| !a.trim().is_empty()) {
             lines.push(Line::from(format!("Artist:    {a}")));
         }
