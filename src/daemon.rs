@@ -414,11 +414,7 @@ impl Daemon {
         let re = match pat.as_deref() {
             Some(p) if !p.is_empty() => match Regex::new(p) {
                 Ok(r) => Some(r),
-                Err(_) => {
-                    self.search = None;
-                    self.notify = Some("invalid search pattern".into());
-                    None
-                }
+                Err(_) => return Vec::new(),
             },
             _ => None,
         };

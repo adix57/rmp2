@@ -83,7 +83,7 @@ fn progress_bar(pos: f64, dur: f64, width: usize) -> String {
         (pos / dur).clamp(0.0, 1.0)
     };
     let filled = (pct * width as f64) as usize;
-    let mut bar = "#".repeat(filled);
+    let mut bar = "=".repeat(filled);
     bar.push_str(&"-".repeat(width.saturating_sub(filled)));
     format!("[{bar}]")
 }
@@ -107,6 +107,7 @@ pub fn filter_pane(frame: &mut Frame, area: Rect, tags: &[TagInfo], focused: boo
     frame.render_widget(list, area);
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn queue_pane(
     frame: &mut Frame,
     area: Rect,
@@ -115,7 +116,11 @@ pub fn queue_pane(
     now: Option<&NowPlaying>,
     focused: bool,
     cursor: usize,
+    search: Option<&str>,
 ) {
+    let re = search
+        .filter(|p| !p.trim().is_empty())
+        .and_then(|p| regex::Regex::new(p).ok());
     let by_id: std::collections::HashMap<i64, &MediaInfo> =
         media.iter().map(|m| (m.id, m)).collect();
     let items: Vec<ListItem> = queue
@@ -127,13 +132,11 @@ pub fn queue_pane(
             let play_mark = if now_marks { ">" } else { " " };
             let fav = if m.favorite { "*" } else { " " };
             let name = display_name(m);
-            let artist = m
-                .artist
-                .as_ref()
-                .filter(|a| !a.trim().is_empty())
-                .map(|a| format!(" - {a}"))
-                .unwrap_or_default();
-            let text = format!("{play_mark}{fav} {name}{artist}");
+            let mut spans = vec![Span::raw(format!("{play_mark}{fav} "))];
+            spans.extend(highlight_matches(&name, re.as_ref()));
+            if let Some(a) = m.artist.as_ref().filter(|a| !a.trim().is_empty()) {
+                spans.push(Span::raw(format!(" - {a}")));
+            }
             let mut style = Style::default();
             if focused && i == cursor {
                 style = style.add_modifier(Modifier::REVERSED);
@@ -141,11 +144,37 @@ pub fn queue_pane(
             if now_marks {
                 style = style.fg(Color::Green);
             }
-            ListItem::new(text).style(style)
+            ListItem::new(Line::from(spans)).style(style)
         })
         .collect();
     let list = List::new(items).block(frame_block("Queue", focused));
     frame.render_widget(list, area);
+}
+
+fn highlight_matches(text: &str, re: Option<&regex::Regex>) -> Vec<Span<'static>> {
+    let mut spans: Vec<Span> = Vec::new();
+    let Some(re) = re else {
+        return vec![Span::raw(text.to_string())];
+    };
+    let lowered = text.to_lowercase();
+    let mut last = 0;
+    for m in re.find_iter(&lowered) {
+        if m.start() > last {
+            spans.push(Span::raw(text[last..m.start()].to_string()));
+        }
+        spans.push(Span::styled(
+            text[m.start()..m.end()].to_string(),
+            Style::default().add_modifier(Modifier::UNDERLINED),
+        ));
+        last = m.end();
+    }
+    if last < text.len() {
+        spans.push(Span::raw(text[last..].to_string()));
+    }
+    if spans.is_empty() {
+        spans.push(Span::raw(text.to_string()));
+    }
+    spans
 }
 
 pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, focused: bool) {
@@ -185,6 +214,49 @@ pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, f
     let para = Paragraph::new(lines)
         .block(frame_block("Info", focused))
         .wrap(Wrap { trim: false });
+    frame.render_widget(para, area);
+}
+
+pub fn search_bar(
+    frame: &mut Frame,
+    area: Rect,
+    text: &str,
+    cursor: usize,
+    count: usize,
+    total: usize,
+    invalid: bool,
+) {
+    let mut spans: Vec<Span> = Vec::new();
+    let prompt = Span::styled(
+        "/",
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    );
+    spans.push(prompt);
+    let cur = cursor.min(text.len());
+    spans.push(Span::raw(text[..cur].to_string()));
+    spans.push(Span::styled(
+        " ",
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::REVERSED),
+    ));
+    spans.push(Span::raw(text[cur..].to_string()));
+    let counter = if invalid {
+        Span::styled("0/0", Style::default().fg(Color::Red))
+    } else {
+        Span::styled(
+            format!("{count}/{total}"),
+            Style::default().fg(Color::DarkGray),
+        )
+    };
+    let left_w: usize = spans.iter().map(|s| s.content.chars().count()).sum();
+    let right_w = counter.content.chars().count();
+    let gap = area.width.saturating_sub((left_w + right_w) as u16) as usize;
+    spans.push(Span::raw(" ".repeat(gap)));
+    spans.push(counter);
+    let para = Paragraph::new(Line::from(spans));
     frame.render_widget(para, area);
 }
 

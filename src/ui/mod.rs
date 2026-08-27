@@ -4,10 +4,12 @@ pub mod panes;
 
 use crate::config::Config;
 use crate::proto::{Command, Snapshot};
-use crate::ui::dialog::{Dialog, DialogOutcome, FormCommand, Search, SearchOutcome};
+use crate::ui::dialog::{Dialog, DialogOutcome, FormCommand};
 use crate::ui::keymap::{Action, Keymap};
-use crate::ui::panes::{Section, filter_pane, queue_pane, state_pane, status_bar};
-use crossterm::event::{Event, KeyEvent, MouseButton, MouseEvent, MouseEventKind, poll, read};
+use crate::ui::panes::{Section, filter_pane, queue_pane, search_bar, state_pane, status_bar};
+use crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, poll, read,
+};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::widgets::Clear;
 use std::io::{self, BufRead, BufReader, Write};
@@ -79,13 +81,88 @@ pub struct App {
     section: Section,
     queue_cursor: usize,
     tag_cursor: usize,
-    search: Option<Search>,
+    search: Option<SearchBar>,
     dialog: Option<Dialog>,
     quit: bool,
     shutdown: bool,
     msg: Option<(String, Instant)>,
     queue_area: Rect,
     filter_area: Rect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchBarOutcome {
+    Done,
+    Cancel,
+    None,
+}
+
+struct SearchBar {
+    text: String,
+    cursor: usize,
+}
+
+impl SearchBar {
+    fn new() -> Self {
+        SearchBar {
+            text: String::new(),
+            cursor: 0,
+        }
+    }
+
+    fn handle_key(&mut self, key: KeyEvent) -> SearchBarOutcome {
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            return SearchBarOutcome::None;
+        }
+        match key.code {
+            KeyCode::Esc => SearchBarOutcome::Cancel,
+            KeyCode::Enter => SearchBarOutcome::Done,
+            KeyCode::Backspace => {
+                if self.cursor > 0 {
+                    self.text.remove(self.cursor - 1);
+                    self.cursor -= 1;
+                }
+                SearchBarOutcome::None
+            }
+            KeyCode::Delete => {
+                if self.cursor < self.text.len() {
+                    self.text.remove(self.cursor);
+                }
+                SearchBarOutcome::None
+            }
+            KeyCode::Left => {
+                self.cursor = self.cursor.saturating_sub(1);
+                SearchBarOutcome::None
+            }
+            KeyCode::Right => {
+                self.cursor = (self.cursor + 1).min(self.text.len());
+                SearchBarOutcome::None
+            }
+            KeyCode::Home => {
+                self.cursor = 0;
+                SearchBarOutcome::None
+            }
+            KeyCode::End => {
+                self.cursor = self.text.len();
+                SearchBarOutcome::None
+            }
+            KeyCode::Char(c) => {
+                self.text.insert(self.cursor, c);
+                self.cursor += 1;
+                SearchBarOutcome::None
+            }
+            _ => SearchBarOutcome::None,
+        }
+    }
+
+    fn pattern(&self) -> Option<String> {
+        let t = self.text.trim();
+        if t.is_empty() {
+            None
+        } else {
+            Some(t.to_string())
+        }
+    }
 }
 
 impl App {
@@ -150,17 +227,21 @@ impl App {
             return;
         }
         if let Some(s) = self.search.as_mut() {
+            let before = s.text.clone();
             match s.handle_key(key) {
-                SearchOutcome::Done(p) => {
-                    let pat = if p.trim().is_empty() { None } else { Some(p) };
-                    self.connection.send(Command::SetSearch { pattern: pat });
-                    self.search = None;
-                }
-                SearchOutcome::Cancel => {
+                SearchBarOutcome::Done => self.search = None,
+                SearchBarOutcome::Cancel => {
                     self.connection.send(Command::SetSearch { pattern: None });
                     self.search = None;
                 }
-                SearchOutcome::None => {}
+                SearchBarOutcome::None => {}
+            }
+            if let Some(s) = self.search.as_mut()
+                && s.text != before
+            {
+                self.connection.send(Command::SetSearch {
+                    pattern: s.pattern(),
+                });
             }
             return;
         }
@@ -176,7 +257,7 @@ impl App {
                     self.dialog = Some(Dialog::Edit(dialog::Form::new_edit(&sel)));
                 }
             }
-            Some(Action::Search) => self.search = Some(Search::new()),
+            Some(Action::Search) => self.search = Some(SearchBar::new()),
             Some(Action::MoveUp) => self.move_cursor(-1),
             Some(Action::MoveDown) => self.move_cursor(1),
             Some(Action::PrevSection) => self.section = self.section.prev(),
@@ -360,6 +441,7 @@ impl App {
                     s.now.as_ref(),
                     self.section == Section::Queue,
                     self.queue_cursor,
+                    s.search.as_deref(),
                 );
                 state_pane(
                     frame,
@@ -372,16 +454,25 @@ impl App {
                     .as_ref()
                     .filter(|(_, t)| t.elapsed() < Duration::from_secs(4))
                     .map(|(m, _)| m.as_str());
-                status_bar(frame, status, s, msg);
+                if let Some(sb) = &self.search {
+                    let invalid =
+                        sb.pattern().is_some() && regex::Regex::new(sb.text.trim()).is_err();
+                    search_bar(
+                        frame,
+                        status,
+                        &sb.text,
+                        sb.cursor,
+                        s.queue.len(),
+                        s.all_media.len(),
+                        invalid,
+                    );
+                } else {
+                    status_bar(frame, status, s, msg);
+                }
             }
             None => {
                 frame.render_widget(ratatui::widgets::Paragraph::new("connecting..."), main);
             }
-        }
-        if let Some(s) = &self.search {
-            let total = snap.map(|s| s.all_media.len()).unwrap_or(0);
-            let count = snap.map(|s| s.queue.len()).unwrap_or(0);
-            dialog::search_box(frame, queue, s, count, total);
         }
         if let Some(d) = &self.dialog {
             frame.render_widget(Clear, queue);
@@ -416,4 +507,45 @@ pub fn run(connection: Connection, cfg: Config) -> io::Result<()> {
     })();
     ratatui::restore();
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossterm::event::KeyCode;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn searching_accumulates_text_and_live_pattern() {
+        let mut sb = SearchBar::new();
+        assert_eq!(sb.pattern(), None);
+        for c in "beat".chars() {
+            assert_eq!(sb.handle_key(key(KeyCode::Char(c))), SearchBarOutcome::None);
+        }
+        assert_eq!(sb.pattern(), Some("beat".to_string()));
+        assert_eq!(sb.handle_key(key(KeyCode::Esc)), SearchBarOutcome::Cancel);
+    }
+
+    #[test]
+    fn search_backspace_and_enter() {
+        let mut sb = SearchBar::new();
+        for c in "abc".chars() {
+            sb.handle_key(key(KeyCode::Char(c)));
+        }
+        sb.handle_key(key(KeyCode::Backspace));
+        assert_eq!(sb.text, "ab");
+        assert_eq!(sb.handle_key(key(KeyCode::Enter)), SearchBarOutcome::Done);
+    }
+
+    #[test]
+    fn search_empty_or_whitespace_is_no_pattern() {
+        let mut sb = SearchBar::new();
+        assert_eq!(sb.pattern(), None);
+        sb.handle_key(key(KeyCode::Char(' ')));
+        sb.handle_key(key(KeyCode::Char(' ')));
+        assert_eq!(sb.pattern(), None);
+    }
 }

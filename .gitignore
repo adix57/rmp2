@@ -1,9 +1,9 @@
 plan.md
-
+todo.md
+*.mp3
+*.m4a
+*.m3u
 
 # Added by cargo
 
 /target
-*.mp3
-*.m4a
-*.m3u
