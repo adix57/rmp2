@@ -1,7 +1,7 @@
 use crate::config::{Config, Paths};
 use crate::db::{Library, classify_uri};
 use crate::engine::{Lcg, filter_queue, next_index};
-use crate::mpv::{Mpv, MpvMsg, P_EOF, P_IDLE, P_PAUSE, P_TIME_POS, live_info, probe_metadata};
+use crate::mpv::{Mpv, MpvMsg, P_PAUSE, P_TIME_POS, live_info, probe_metadata};
 use crate::proto::{Command, NowPlaying, RepeatMode, Snapshot};
 use crate::state::{self, LastState};
 use regex::Regex;
@@ -168,8 +168,6 @@ impl Daemon {
         let _ = mpv.volume(self.volume);
         mpv.observe(P_PAUSE, "pause");
         mpv.observe(P_TIME_POS, "time-pos");
-        mpv.observe(P_IDLE, "idle-active");
-        mpv.observe(P_EOF, "eof-reached");
         if let Some(id) = self.now_id
             && let Some(m) = self.lib.media(id).ok().flatten()
         {
@@ -264,14 +262,12 @@ impl Daemon {
                             self.dirty = true;
                         }
                     }
-                    "idle-active" => {
-                        if !self.eof_pending {
-                            self.eof_pending = true;
-                            self.track_ended();
-                        }
-                    }
-                    "eof-reached" => {
-                        if !self.eof_pending {
+                    "end-file" => {
+                        let reason = data
+                            .as_ref()
+                            .and_then(|v| v.get("reason"))
+                            .and_then(|v| v.as_str());
+                        if reason == Some("eof") && !self.eof_pending {
                             self.eof_pending = true;
                             self.track_ended();
                         }

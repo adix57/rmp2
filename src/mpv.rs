@@ -36,8 +36,6 @@ impl Drop for Mpv {
 
 pub const P_PAUSE: u32 = 1;
 pub const P_TIME_POS: u32 = 2;
-pub const P_IDLE: u32 = 3;
-pub const P_EOF: u32 = 4;
 
 fn connect_retry(path: &Path, attempts: usize, delay: Duration) -> Result<UnixStream, String> {
     let mut last = "no attempt".to_string();
@@ -194,7 +192,11 @@ fn read_loop(reader: BufReader<UnixStream>, tx: Sender<MpvMsg>, pending: Pending
                 .and_then(|v| v.as_str())
                 .unwrap_or(ev)
                 .to_string();
-            let data = msg.get("data").cloned().filter(|d| !d.is_null());
+            let data = if let Some(r) = msg.get("reason").and_then(|v| v.as_str()) {
+                Some(json!({ "reason": r }))
+            } else {
+                msg.get("data").cloned().filter(|d| !d.is_null())
+            };
             if tx.send(MpvMsg::Event { name, data }).is_err() {
                 break;
             }
