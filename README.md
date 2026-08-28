@@ -14,6 +14,8 @@ both offline files and online streams (mpv/yt-dlp handles the stream).
 - Mini-queue (below the Filter pane, 35% height): `Shift+a` pins the selected
   track so it plays next regardless of tag filters; it drains in the order
   added before the regular queue continues.
+- Mouse: click a section to focus it, click a tag/media to select, double-click
+  media to play, click `rep`/`shf` in the status bar to toggle repeat/shuffle.
 - Background daemon: `Shift+q` detaches while playback continues; reattach by
   running `rmp` again. `q`/`esc` (with confirmation) shuts the daemon down.
 - Configurable keybindings via `config.toml`.

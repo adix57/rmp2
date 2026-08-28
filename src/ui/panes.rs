@@ -300,7 +300,17 @@ pub fn search_bar(
     frame.render_widget(para, area);
 }
 
-pub fn status_bar(frame: &mut Frame, area: Rect, snap: &Snapshot, msg: Option<&str>) {
+pub struct StatusBarHits {
+    pub rep: Option<Rect>,
+    pub shf: Option<Rect>,
+}
+
+pub fn status_bar(
+    frame: &mut Frame,
+    area: Rect,
+    snap: &Snapshot,
+    msg: Option<&str>,
+) -> StatusBarHits {
     let mut left: Vec<Span> = Vec::new();
     if let Some(text) = msg {
         left.push(Span::styled(
@@ -355,9 +365,27 @@ pub fn status_bar(frame: &mut Frame, area: Rect, snap: &Snapshot, msg: Option<&s
     let left_w: usize = left.iter().map(|s| s.content.chars().count()).sum();
     let right_w: usize = right.iter().map(|s| s.content.chars().count()).sum();
     let gap = area.width.saturating_sub((left_w + right_w) as u16) as usize;
+    let x0 = area.x as i64 + area.width as i64 - right_w as i64;
+    let mut x = x0;
+    let mut hit_rep = None;
+    let mut hit_shf = None;
+    for (i, s) in right.iter().enumerate() {
+        let w = s.content.chars().count() as u16;
+        let rect = Rect::new(x.max(0) as u16, area.y, w, 1);
+        match i {
+            4 => hit_rep = Some(rect),
+            7 => hit_shf = Some(rect),
+            _ => {}
+        }
+        x += w as i64;
+    }
     let mut spans = left;
     spans.push(Span::raw(" ".repeat(gap)));
     spans.extend(right);
     let para = Paragraph::new(Line::from(spans));
     frame.render_widget(para, area);
+    StatusBarHits {
+        rep: hit_rep,
+        shf: hit_shf,
+    }
 }

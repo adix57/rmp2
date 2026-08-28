@@ -12,6 +12,7 @@ use crate::ui::panes::{
 use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, poll, read,
 };
+use ratatui::layout::Position;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::widgets::Clear;
 use std::io::{self, BufRead, BufReader, Write};
@@ -92,6 +93,12 @@ pub struct App {
     msg: Option<(String, Instant)>,
     queue_area: Rect,
     filter_area: Rect,
+    mini_area: Rect,
+    state_area: Rect,
+    status_area: Rect,
+    status_rep: Option<Rect>,
+    status_shf: Option<Rect>,
+    last_click: Option<(Position, Instant)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -189,6 +196,12 @@ impl App {
             msg: None,
             queue_area: Rect::default(),
             filter_area: Rect::default(),
+            mini_area: Rect::default(),
+            state_area: Rect::default(),
+            status_area: Rect::default(),
+            status_rep: None,
+            status_shf: None,
+            last_click: None,
         }
     }
 
@@ -354,7 +367,15 @@ impl App {
         } = m;
         if let MouseEventKind::Down(MouseButton::Left) = kind {
             let pos = ratatui::layout::Position::new(column, row);
+            let now = Instant::now();
+            let double = matches!(self.last_click, Some((p, t)) if p.y == pos.y && now.duration_since(t) < Duration::from_millis(400));
+            if double {
+                self.last_click = None;
+            } else {
+                self.last_click = Some((pos, now));
+            }
             if self.queue_area.contains(pos) {
+                self.section = Section::Queue;
                 let rel = row.saturating_sub(self.queue_area.y + 1);
                 let len = self.snap.as_ref().map(|s| s.queue.len()).unwrap_or(0);
                 if usize::from(rel) < len {
@@ -365,10 +386,31 @@ impl App {
                         .and_then(|s| s.queue.get(self.queue_cursor))
                         .copied()
                     {
-                        self.connection.send(Command::Select { id });
+                        if double {
+                            self.connection.send(Command::Play { id });
+                        } else {
+                            self.connection.send(Command::Select { id });
+                        }
+                    }
+                }
+            } else if self.mini_area.contains(pos) {
+                self.section = Section::Mini;
+                let rel = row.saturating_sub(self.mini_area.y + 1);
+                let len = self.snap.as_ref().map(|s| s.mini_queue.len()).unwrap_or(0);
+                if usize::from(rel) < len {
+                    self.mini_cursor = usize::from(rel);
+                    if double
+                        && let Some(id) = self
+                            .snap
+                            .as_ref()
+                            .and_then(|s| s.mini_queue.get(self.mini_cursor))
+                            .copied()
+                    {
+                        self.connection.send(Command::Play { id });
                     }
                 }
             } else if self.filter_area.contains(pos) {
+                self.section = Section::Filter;
                 let rel = row.saturating_sub(self.filter_area.y + 1);
                 if let Some(t) = self
                     .snap
@@ -378,6 +420,14 @@ impl App {
                     let name = t.name.clone();
                     self.connection.send(Command::ToggleTag { tag: name });
                 }
+            } else if self.status_area.contains(pos) {
+                if self.status_rep.is_some_and(|r| r.contains(pos)) {
+                    self.connection.send(Command::RepeatCycle);
+                } else if self.status_shf.is_some_and(|r| r.contains(pos)) {
+                    self.connection.send(Command::ShuffleToggle);
+                }
+            } else if self.state_area.contains(pos) {
+                self.section = Section::Info;
             }
         }
     }
@@ -488,9 +538,12 @@ impl App {
         .areas(main);
         self.filter_area = filter;
         self.queue_area = queue;
+        self.state_area = state;
+        self.status_area = status;
         let [filter_top, mini] =
             Layout::vertical([Constraint::Percentage(65), Constraint::Percentage(35)])
                 .areas(filter);
+        self.mini_area = mini;
         let snap = self.snap.as_ref();
         match snap {
             Some(s) => {
@@ -544,7 +597,9 @@ impl App {
                         invalid,
                     );
                 } else {
-                    status_bar(frame, status, s, msg);
+                    let hits = status_bar(frame, status, s, msg);
+                    self.status_rep = hits.rep;
+                    self.status_shf = hits.shf;
                 }
             }
             None => {
