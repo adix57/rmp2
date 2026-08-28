@@ -53,6 +53,7 @@ pub struct NowPlaying {
 pub struct Snapshot {
     pub all_media: Vec<MediaInfo>,
     pub queue: Vec<i64>,
+    pub mini_queue: Vec<i64>,
     pub tags: Vec<TagInfo>,
     pub search: Option<String>,
     pub selected: Option<MediaInfo>,
@@ -105,6 +106,9 @@ pub enum Command {
         tags: Vec<String>,
     },
     Delete {
+        id: i64,
+    },
+    AddMini {
         id: i64,
     },
     ToggleFavorite {

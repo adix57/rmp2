@@ -11,6 +11,9 @@ both offline files and online streams (mpv/yt-dlp handles the stream).
 - Repeat (`r`) cycles off -> repeat-all -> repeat-one.
 - Shuffle (`s`) plays in random order without reordering the list.
 - Regex search (`/`) over title, artist, uri, and tags.
+- Mini-queue (below the Filter pane, 35% height): `Shift+a` pins the selected
+  track so it plays next regardless of tag filters; it drains in the order
+  added before the regular queue continues.
 - Background daemon: `Shift+q` detaches while playback continues; reattach by
   running `rmp` again. `q`/`esc` (with confirmation) shuts the daemon down.
 - Configurable keybindings via `config.toml`.
@@ -44,5 +47,6 @@ Bound in `src/config.rs` (all remappable in `config.toml`):
 - `Enter` play selected, `Space` play/pause, `j`/`k` navigate, `h`/`l` cycle panes
 - `n`/`p` next/previous, `r` repeat cycle, `s` shuffle
 - `a` add media, `e` edit media, `f` toggle favorite
+- `Shift+a` add selected media to the mini-queue (exception list), `b` focus it
 - `/` search, `Shift+h`/`Shift+l` seek backward/forward (5s)
 - `Tab` cycle sections, `q`/`esc` quit (confirm), `Shift+q` detach to background

@@ -6,7 +6,9 @@ use crate::config::Config;
 use crate::proto::{Command, Snapshot};
 use crate::ui::dialog::{Dialog, DialogOutcome, FormCommand};
 use crate::ui::keymap::{Action, Keymap};
-use crate::ui::panes::{Section, filter_pane, queue_pane, search_bar, state_pane, status_bar};
+use crate::ui::panes::{
+    Section, filter_pane, mini_pane, queue_pane, search_bar, state_pane, status_bar,
+};
 use crossterm::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind, poll, read,
 };
@@ -258,6 +260,12 @@ impl App {
                 }
             }
             Some(Action::Search) => self.search = Some(SearchBar::new()),
+            Some(Action::AddMini) => {
+                if let Some(sel) = self.snap.as_ref().and_then(|s| s.selected.clone()) {
+                    self.connection.send(Command::AddMini { id: sel.id });
+                }
+            }
+            Some(Action::FocusMini) => self.section = Section::Mini,
             Some(Action::MoveUp) => self.move_cursor(-1),
             Some(Action::MoveDown) => self.move_cursor(1),
             Some(Action::PrevSection) => self.section = self.section.prev(),
@@ -268,11 +276,13 @@ impl App {
             Some(Action::Activate) => match self.section {
                 Section::Queue => self.play_cursor(),
                 Section::Filter => self.toggle_tag_cursor(),
+                Section::Mini => {}
                 Section::Info => {}
             },
             Some(Action::Toggle) => match self.section {
                 Section::Queue => self.connection.send(Command::PlayPause),
                 Section::Filter => self.toggle_tag_cursor(),
+                Section::Mini => {}
                 Section::Info => {}
             },
             Some(Action::NextTrack) => self.connection.send(Command::Next),
@@ -389,6 +399,7 @@ impl App {
                 self.tag_cursor =
                     (self.tag_cursor as i64 + delta).clamp(0, len as i64 - 1) as usize;
             }
+            Section::Mini => {}
             Section::Info => {}
         }
     }
@@ -423,15 +434,26 @@ impl App {
         .areas(main);
         self.filter_area = filter;
         self.queue_area = queue;
+        let [filter_top, mini] =
+            Layout::vertical([Constraint::Percentage(65), Constraint::Percentage(35)])
+                .areas(filter);
         let snap = self.snap.as_ref();
         match snap {
             Some(s) => {
                 filter_pane(
                     frame,
-                    filter,
+                    filter_top,
                     &s.tags,
                     self.section == Section::Filter,
                     self.tag_cursor,
+                );
+                mini_pane(
+                    frame,
+                    mini,
+                    &s.all_media,
+                    &s.mini_queue,
+                    s.now.as_ref(),
+                    self.section == Section::Mini,
                 );
                 queue_pane(
                     frame,

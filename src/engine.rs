@@ -16,6 +16,13 @@ pub fn search_blob(m: &MediaInfo) -> String {
     parts.join(" ")
 }
 
+pub fn mini_pick(mini: &mut Vec<i64>, finished: Option<i64>) -> Option<i64> {
+    if let Some(f) = finished {
+        mini.retain(|x| *x != f);
+    }
+    mini.first().copied()
+}
+
 pub fn matches(m: &MediaInfo, checked: &[String], re: Option<&Regex>) -> bool {
     let tags_ok = checked.iter().all(|c| m.tags.iter().any(|t| t == c));
     if !tags_ok {
@@ -148,6 +155,24 @@ mod tests {
         let blob = search_blob(&m);
         assert!(blob.contains("mysong"));
         assert!(blob.contains("rock"));
+    }
+
+    #[test]
+    fn mini_queue_pops_finished_and_preserves_order() {
+        let mut mini = vec![10, 20, 30];
+        assert_eq!(mini_pick(&mut mini, Some(10)), Some(20));
+        assert_eq!(mini, vec![20, 30]);
+        assert_eq!(mini_pick(&mut mini, Some(20)), Some(30));
+        assert_eq!(mini, vec![30]);
+        assert_eq!(mini_pick(&mut mini, Some(30)), None);
+        assert!(mini.is_empty());
+    }
+
+    #[test]
+    fn mini_main_track_end_keeps_mini_intact() {
+        let mut mini = vec![7, 8];
+        assert_eq!(mini_pick(&mut mini, Some(99)), Some(7));
+        assert_eq!(mini, vec![7, 8]);
     }
 
     #[test]

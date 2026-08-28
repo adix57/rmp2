@@ -11,6 +11,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
     Filter,
+    Mini,
     Queue,
     Info,
 }
@@ -18,7 +19,8 @@ pub enum Section {
 impl Section {
     pub fn next(self) -> Self {
         match self {
-            Section::Filter => Section::Queue,
+            Section::Filter => Section::Mini,
+            Section::Mini => Section::Queue,
             Section::Queue => Section::Info,
             Section::Info => Section::Filter,
         }
@@ -26,7 +28,8 @@ impl Section {
     pub fn prev(self) -> Self {
         match self {
             Section::Filter => Section::Info,
-            Section::Queue => Section::Filter,
+            Section::Mini => Section::Filter,
+            Section::Queue => Section::Mini,
             Section::Info => Section::Queue,
         }
     }
@@ -175,6 +178,39 @@ fn highlight_matches(text: &str, re: Option<&regex::Regex>) -> Vec<Span<'static>
         spans.push(Span::raw(text.to_string()));
     }
     spans
+}
+
+pub fn mini_pane(
+    frame: &mut Frame,
+    area: Rect,
+    media: &[MediaInfo],
+    mini_queue: &[i64],
+    now: Option<&NowPlaying>,
+    focused: bool,
+) {
+    let by_id: std::collections::HashMap<i64, &MediaInfo> =
+        media.iter().map(|m| (m.id, m)).collect();
+    let items: Vec<ListItem> = mini_queue
+        .iter()
+        .enumerate()
+        .filter_map(|(i, id)| by_id.get(id).copied().map(|m| (i, m)))
+        .map(|(i, m)| {
+            let now_marks = now.filter(|n| n.id == m.id).is_some();
+            let mark = if now_marks { ">" } else { " " };
+            let name = display_name(m);
+            let mut spans = vec![Span::raw(format!("{mark}{}. {} ", i + 1, name))];
+            if let Some(a) = m.artist.as_ref().filter(|a| !a.trim().is_empty()) {
+                spans.push(Span::raw(format!("- {a}")));
+            }
+            let mut style = Style::default();
+            if now_marks {
+                style = style.fg(Color::Green);
+            }
+            ListItem::new(Line::from(spans)).style(style)
+        })
+        .collect();
+    let list = List::new(items).block(frame_block("Queue", focused));
+    frame.render_widget(list, area);
 }
 
 pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, focused: bool) {

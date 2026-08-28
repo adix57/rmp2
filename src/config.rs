@@ -86,6 +86,8 @@ pub fn default_bindings() -> BTreeMap<String, String> {
         ("e", "edit_media"),
         ("/", "search"),
         ("f", "favorite"),
+        ("A", "add_mini"),
+        ("b", "focus_mini"),
         ("J", "volume_down"),
         ("K", "volume_up"),
         ("H", "seek_back"),

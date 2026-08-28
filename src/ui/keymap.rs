@@ -24,6 +24,8 @@ pub enum Action {
     EditMedia,
     Search,
     Favorite,
+    AddMini,
+    FocusMini,
     ConfirmQuit,
     Detach,
 }
@@ -50,6 +52,8 @@ fn action_from_str(name: &str) -> Option<Action> {
         "edit_media" => Action::EditMedia,
         "search" => Action::Search,
         "favorite" => Action::Favorite,
+        "add_mini" => Action::AddMini,
+        "focus_mini" => Action::FocusMini,
         "confirm_quit" => Action::ConfirmQuit,
         "detach" => Action::Detach,
         _ => return None,

@@ -1,6 +1,6 @@
 use crate::config::{Config, Paths};
 use crate::db::{Library, classify_uri};
-use crate::engine::{Lcg, filter_queue, next_index};
+use crate::engine::{Lcg, filter_queue, mini_pick, next_index};
 use crate::mpv::{Mpv, MpvMsg, P_PAUSE, P_TIME_POS, live_info, probe_metadata};
 use crate::proto::{Command, NowPlaying, RepeatMode, Snapshot};
 use crate::state::{self, LastState};
@@ -43,6 +43,9 @@ pub struct Daemon {
     shuffle: bool,
     selected: Option<i64>,
     now_id: Option<i64>,
+    last_main_id: Option<i64>,
+    playing_mini: bool,
+    mini_queue: Vec<i64>,
     position: f64,
     paused: bool,
     notify: Option<String>,
@@ -111,6 +114,9 @@ impl Daemon {
             shuffle: last.shuffle,
             selected: None,
             now_id: last.media_id,
+            last_main_id: last.media_id,
+            playing_mini: false,
+            mini_queue: Vec::new(),
             position: last.position,
             paused: !last.playing,
             notify: None,
@@ -337,10 +343,14 @@ impl Daemon {
             }
             return;
         }
+        if let Some(id) = mini_pick(&mut self.mini_queue, self.now_id) {
+            self.play_mini(id);
+            return;
+        }
         let queue = self.queue_ids();
         let next = next_index(
             &queue,
-            self.now_id,
+            self.main_ref(&queue),
             1,
             self.shuffle,
             self.repeat,
@@ -358,7 +368,14 @@ impl Daemon {
         }
     }
 
-    fn play_id(&mut self, id: i64) {
+    fn main_ref(&self, queue: &[i64]) -> Option<i64> {
+        match self.now_id {
+            Some(id) if !self.playing_mini && queue.contains(&id) => Some(id),
+            _ => self.last_main_id,
+        }
+    }
+
+    fn start_playback(&mut self, id: i64, is_main: bool) {
         let info = match self.lib.media(id) {
             Ok(Some(m)) => m,
             Ok(None) => {
@@ -385,6 +402,10 @@ impl Daemon {
                 self.paused = false;
                 self.eof_pending = false;
                 self.pending_resume = None;
+                self.playing_mini = !is_main;
+                if is_main {
+                    self.last_main_id = Some(id);
+                }
                 self.push();
             }
             Err(e) => {
@@ -392,6 +413,14 @@ impl Daemon {
                 self.notify = Some("failed to load media".into());
             }
         }
+    }
+
+    fn play_id(&mut self, id: i64) {
+        self.start_playback(id, true);
+    }
+
+    fn play_mini(&mut self, id: i64) {
+        self.start_playback(id, false);
     }
 
     fn toggle_pause(&mut self) {
@@ -428,21 +457,27 @@ impl Daemon {
             Command::PlayPause => self.toggle_pause(),
             Command::Next => {
                 let q = self.queue_ids();
-                if let Some(n) =
-                    next_index(&q, self.now_id, 1, self.shuffle, self.repeat, &mut |n| {
-                        self.rng.next(n)
-                    })
-                {
+                if let Some(n) = next_index(
+                    &q,
+                    self.main_ref(&q),
+                    1,
+                    self.shuffle,
+                    self.repeat,
+                    &mut |n| self.rng.next(n),
+                ) {
                     self.play_id(n);
                 }
             }
             Command::Prev => {
                 let q = self.queue_ids();
-                if let Some(n) =
-                    next_index(&q, self.now_id, -1, self.shuffle, self.repeat, &mut |n| {
-                        self.rng.next(n)
-                    })
-                {
+                if let Some(n) = next_index(
+                    &q,
+                    self.main_ref(&q),
+                    -1,
+                    self.shuffle,
+                    self.repeat,
+                    &mut |n| self.rng.next(n),
+                ) {
                     self.play_id(n);
                 }
             }
@@ -521,6 +556,7 @@ impl Daemon {
             }
             Command::Delete { id } => {
                 let _ = self.lib.delete_media(id);
+                self.mini_queue.retain(|x| *x != id);
                 if self.now_id == Some(id) {
                     self.now_id = None;
                     self.selected = None;
@@ -531,6 +567,14 @@ impl Daemon {
                 }
                 if self.selected == Some(id) {
                     self.selected = None;
+                }
+                self.push();
+            }
+            Command::AddMini { id } => {
+                if self.lib.media(id).ok().flatten().is_some() {
+                    self.mini_queue.retain(|x| *x != id);
+                    self.mini_queue.push(id);
+                    self.notify = Some("added to queue".into());
                 }
                 self.push();
             }
@@ -634,6 +678,7 @@ impl Daemon {
         Snapshot {
             all_media: all,
             queue,
+            mini_queue: self.mini_queue.clone(),
             tags,
             search: self.search.clone(),
             selected,
