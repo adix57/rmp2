@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +26,9 @@ pub enum Action {
     Favorite,
     AddMini,
     FocusMini,
+    Delete,
+    MiniMoveUp,
+    MiniMoveDown,
     ConfirmQuit,
     Detach,
 }
@@ -54,6 +57,9 @@ fn action_from_str(name: &str) -> Option<Action> {
         "favorite" => Action::Favorite,
         "add_mini" => Action::AddMini,
         "focus_mini" => Action::FocusMini,
+        "delete" => Action::Delete,
+        "mini_move_up" => Action::MiniMoveUp,
+        "mini_move_down" => Action::MiniMoveDown,
         "confirm_quit" => Action::ConfirmQuit,
         "detach" => Action::Detach,
         _ => return None,
@@ -86,7 +92,9 @@ fn key_string(key: KeyEvent) -> Option<String> {
     }
     match key.code {
         KeyCode::Char(c) => {
-            if c.is_ascii_uppercase() {
+            if key.modifiers.contains(KeyModifiers::CONTROL) {
+                Some(format!("ctrl+{c}"))
+            } else if c.is_ascii_uppercase() {
                 Some(c.to_string())
             } else if c == ' ' {
                 Some("space".into())
@@ -125,6 +133,18 @@ mod tests {
         assert_eq!(
             key_string(press(KC::Char('J'), KeyModifiers::SHIFT)).as_deref(),
             Some("J")
+        );
+    }
+
+    #[test]
+    fn ctrl_letters_map_to_ctrl_prefix() {
+        assert_eq!(
+            key_string(press(KC::Char('j'), KeyModifiers::CONTROL)).as_deref(),
+            Some("ctrl+j")
+        );
+        assert_eq!(
+            key_string(press(KC::Char('k'), KeyModifiers::CONTROL)).as_deref(),
+            Some("ctrl+k")
         );
     }
 

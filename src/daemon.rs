@@ -578,6 +578,19 @@ impl Daemon {
                 }
                 self.push();
             }
+            Command::RemoveMini { id } => {
+                self.mini_queue.retain(|x| *x != id);
+                self.push();
+            }
+            Command::MiniMove { id, delta } => {
+                let Some(i) = self.mini_queue.iter().position(|x| *x == id) else {
+                    self.push();
+                    return;
+                };
+                let j = (i as i64 + delta).clamp(0, self.mini_queue.len() as i64 - 1) as usize;
+                self.mini_queue.swap(i, j);
+                self.push();
+            }
             Command::ToggleFavorite { id } => {
                 if let Ok(Some(m)) = self.lib.media(id) {
                     let _ = self.lib.set_favorite(id, !m.favorite);

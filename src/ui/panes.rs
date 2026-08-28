@@ -187,6 +187,7 @@ pub fn mini_pane(
     mini_queue: &[i64],
     now: Option<&NowPlaying>,
     focused: bool,
+    cursor: usize,
 ) {
     let by_id: std::collections::HashMap<i64, &MediaInfo> =
         media.iter().map(|m| (m.id, m)).collect();
@@ -203,6 +204,9 @@ pub fn mini_pane(
                 spans.push(Span::raw(format!("- {a}")));
             }
             let mut style = Style::default();
+            if focused && i == cursor {
+                style = style.add_modifier(Modifier::REVERSED);
+            }
             if now_marks {
                 style = style.fg(Color::Green);
             }

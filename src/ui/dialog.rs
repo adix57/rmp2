@@ -229,6 +229,7 @@ impl Form {
 
 pub enum Dialog {
     ConfirmExit,
+    ConfirmDelete,
     Add(Form),
     Edit(Form),
 }
@@ -236,6 +237,7 @@ pub enum Dialog {
 pub enum DialogOutcome {
     Submit(FormCommand),
     ConfirmExitYes,
+    ConfirmDeleteYes,
     Cancel,
     None,
 }
@@ -244,6 +246,7 @@ impl Dialog {
     pub fn title(&self) -> &'static str {
         match self {
             Dialog::ConfirmExit => " Quit ",
+            Dialog::ConfirmDelete => " Delete ",
             Dialog::Add(_) => " Add Media ",
             Dialog::Edit(_) => " Edit Media ",
         }
@@ -251,10 +254,12 @@ impl Dialog {
 
     pub fn handle_key(&mut self, key: KeyEvent, known: &[String]) -> DialogOutcome {
         match self {
-            Dialog::ConfirmExit => match key.code {
-                KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-                    DialogOutcome::ConfirmExitYes
-                }
+            Dialog::ConfirmExit | Dialog::ConfirmDelete => match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => match self {
+                    Dialog::ConfirmExit => DialogOutcome::ConfirmExitYes,
+                    Dialog::ConfirmDelete => DialogOutcome::ConfirmDeleteYes,
+                    _ => unreachable!(),
+                },
                 KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => DialogOutcome::Cancel,
                 _ => DialogOutcome::None,
             },
@@ -277,23 +282,37 @@ fn centered(area: Rect, width: u16, height: u16) -> Rect {
     rect
 }
 
-pub fn confirm_dialog(frame: &mut Frame, area: Rect) {
+pub fn confirm_dialog(frame: &mut Frame, area: Rect, dialog: &Dialog) {
     let rect = centered(area, 40, 5);
     frame.render_widget(Clear, rect);
+    let (title, message) = match dialog {
+        Dialog::ConfirmExit => (
+            " Quit ",
+            vec![
+                Line::from("Quit and stop rmp? (y/n)"),
+                Line::from(""),
+                Line::from("Shift+q detaches and keeps playing instead"),
+            ],
+        ),
+        Dialog::ConfirmDelete => (
+            " Delete ",
+            vec![
+                Line::from("Delete this media? (y/n)"),
+                Line::from(""),
+                Line::from("This removes it from the library"),
+            ],
+        ),
+        _ => unreachable!(),
+    };
     let block = Block::default()
         .borders(Borders::ALL)
         .border_set(ASCII_BORDER)
-        .title(" Quit ")
+        .title(title)
         .title_alignment(Alignment::Center)
         .border_style(Style::default().fg(Color::Yellow));
-    let text = vec![
-        Line::from("Quit and stop rmp? (y/n)"),
-        Line::from(""),
-        Line::from("Shift+q detaches and keeps playing instead"),
-    ];
     frame.render_widget(block, rect);
     frame.render_widget(
-        Paragraph::new(text).alignment(Alignment::Center),
+        Paragraph::new(message).alignment(Alignment::Center),
         Rect {
             y: rect.y + 2,
             height: rect.height.saturating_sub(2),
@@ -303,13 +322,13 @@ pub fn confirm_dialog(frame: &mut Frame, area: Rect) {
 }
 
 pub fn form_dialog(frame: &mut Frame, area: Rect, dialog: &Dialog) {
-    if let Dialog::ConfirmExit = dialog {
-        confirm_dialog(frame, area);
+    if matches!(dialog, Dialog::ConfirmExit | Dialog::ConfirmDelete) {
+        confirm_dialog(frame, area, dialog);
         return;
     }
     let form = match dialog {
         Dialog::Add(f) | Dialog::Edit(f) => f,
-        Dialog::ConfirmExit => unreachable!(),
+        Dialog::ConfirmExit | Dialog::ConfirmDelete => unreachable!(),
     };
     let tags_field = form.tags_index() == form.focus && !form.suggestions.is_empty();
     let height = if tags_field { 14 } else { 10 };

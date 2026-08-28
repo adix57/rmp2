@@ -111,8 +111,33 @@ pub enum Command {
     AddMini {
         id: i64,
     },
+    RemoveMini {
+        id: i64,
+    },
+    MiniMove {
+        id: i64,
+        delta: i64,
+    },
     ToggleFavorite {
         id: i64,
     },
     Shutdown,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_mini_commands() {
+        let add: Command =
+            serde_json::from_str(r#"{"action":"add_mini","id":3}"#).expect("parse add_mini");
+        assert!(matches!(add, Command::AddMini { id: 3 }));
+        let remove: Command =
+            serde_json::from_str(r#"{"action":"remove_mini","id":3}"#).expect("parse remove_mini");
+        assert!(matches!(remove, Command::RemoveMini { id: 3 }));
+        let mv: Command = serde_json::from_str(r#"{"action":"mini_move","id":2,"delta":-1}"#)
+            .expect("parse mini_move");
+        assert!(matches!(mv, Command::MiniMove { id: 2, delta: -1 }));
+    }
 }

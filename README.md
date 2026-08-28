@@ -47,6 +47,8 @@ Bound in `src/config.rs` (all remappable in `config.toml`):
 - `Enter` play selected, `Space` play/pause, `j`/`k` navigate, `h`/`l` cycle panes
 - `n`/`p` next/previous, `r` repeat cycle, `s` shuffle
 - `a` add media, `e` edit media, `f` toggle favorite
-- `Shift+a` add selected media to the mini-queue (exception list), `b` focus it
-- `/` search, `Shift+h`/`Shift+l` seek backward/forward (5s)
+- `Shift+a` add selected media to the mini-queue (exception list), `b` toggle focus to/from it
+- `d` delete (confirm in main queue; from the mini-queue removes without confirmation)
+- `Ctrl+j`/`Ctrl+k` reorder the selected mini-queue item down/up
+- `/` search, `Shift+h`/`Shift+l` or `left`/`right` seek backward/forward (5s)
 - `Tab` cycle sections, `q`/`esc` quit (confirm), `Shift+q` detach to background

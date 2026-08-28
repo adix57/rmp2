@@ -81,8 +81,10 @@ pub struct App {
     keymap: Keymap,
     snap: Option<Snapshot>,
     section: Section,
+    prev_section: Section,
     queue_cursor: usize,
     tag_cursor: usize,
+    mini_cursor: usize,
     search: Option<SearchBar>,
     dialog: Option<Dialog>,
     quit: bool,
@@ -176,8 +178,10 @@ impl App {
             keymap,
             snap: None,
             section: Section::Queue,
+            prev_section: Section::Queue,
             queue_cursor: 0,
             tag_cursor: 0,
+            mini_cursor: 0,
             search: None,
             dialog: None,
             quit: false,
@@ -200,6 +204,9 @@ impl App {
             }
             self.queue_cursor = self.queue_cursor.min(snap.queue.len().saturating_sub(1));
             self.tag_cursor = self.tag_cursor.min(snap.tags.len().saturating_sub(1));
+            self.mini_cursor = self
+                .mini_cursor
+                .min(snap.mini_queue.len().saturating_sub(1));
             self.snap = Some(snap);
         }
     }
@@ -219,6 +226,12 @@ impl App {
                 DialogOutcome::ConfirmExitYes => {
                     self.shutdown = true;
                     self.quit = true;
+                    self.dialog = None;
+                }
+                DialogOutcome::ConfirmDeleteYes => {
+                    if let Some(sel) = self.snap.as_ref().and_then(|s| s.selected.clone()) {
+                        self.connection.send(Command::Delete { id: sel.id });
+                    }
                     self.dialog = None;
                 }
                 DialogOutcome::Cancel => {
@@ -265,7 +278,29 @@ impl App {
                     self.connection.send(Command::AddMini { id: sel.id });
                 }
             }
-            Some(Action::FocusMini) => self.section = Section::Mini,
+            Some(Action::FocusMini) => {
+                if self.section == Section::Mini {
+                    self.section = self.prev_section;
+                } else {
+                    self.prev_section = self.section;
+                    self.section = Section::Mini;
+                }
+            }
+            Some(Action::Delete) => match self.section {
+                Section::Mini => {
+                    if let Some(id) = self
+                        .snap
+                        .as_ref()
+                        .and_then(|s| s.mini_queue.get(self.mini_cursor))
+                        .copied()
+                    {
+                        self.connection.send(Command::RemoveMini { id });
+                    }
+                }
+                _ => self.dialog = Some(Dialog::ConfirmDelete),
+            },
+            Some(Action::MiniMoveUp) => self.mini_move(-1),
+            Some(Action::MiniMoveDown) => self.mini_move(1),
             Some(Action::MoveUp) => self.move_cursor(-1),
             Some(Action::MoveDown) => self.move_cursor(1),
             Some(Action::PrevSection) => self.section = self.section.prev(),
@@ -399,9 +434,28 @@ impl App {
                 self.tag_cursor =
                     (self.tag_cursor as i64 + delta).clamp(0, len as i64 - 1) as usize;
             }
-            Section::Mini => {}
+            Section::Mini => {
+                let len = self.snap.as_ref().map(|s| s.mini_queue.len()).unwrap_or(0);
+                if len == 0 {
+                    return;
+                }
+                self.mini_cursor =
+                    (self.mini_cursor as i64 + delta).clamp(0, len as i64 - 1) as usize;
+            }
             Section::Info => {}
         }
+    }
+
+    fn mini_move(&mut self, delta: i64) {
+        let Some(id) = self
+            .snap
+            .as_ref()
+            .and_then(|s| s.mini_queue.get(self.mini_cursor))
+            .copied()
+        else {
+            return;
+        };
+        self.connection.send(Command::MiniMove { id, delta });
     }
 
     fn play_cursor(&mut self) {
@@ -454,6 +508,7 @@ impl App {
                     &s.mini_queue,
                     s.now.as_ref(),
                     self.section == Section::Mini,
+                    self.mini_cursor,
                 );
                 queue_pane(
                     frame,
