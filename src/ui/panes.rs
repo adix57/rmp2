@@ -91,7 +91,14 @@ fn progress_bar(pos: f64, dur: f64, width: usize) -> String {
     format!("[{bar}]")
 }
 
-pub fn filter_pane(frame: &mut Frame, area: Rect, tags: &[TagInfo], focused: bool, cursor: usize) {
+pub fn filter_pane(
+    frame: &mut Frame,
+    title: &str,
+    area: Rect,
+    tags: &[TagInfo],
+    focused: bool,
+    cursor: usize,
+) {
     let items: Vec<ListItem> = tags
         .iter()
         .enumerate()
@@ -106,13 +113,14 @@ pub fn filter_pane(frame: &mut Frame, area: Rect, tags: &[TagInfo], focused: boo
             ListItem::new(text).style(style)
         })
         .collect();
-    let list = List::new(items).block(frame_block("Filter", focused));
+    let list = List::new(items).block(frame_block(title, focused));
     frame.render_widget(list, area);
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn queue_pane(
     frame: &mut Frame,
+    title: &str,
     area: Rect,
     media: &[MediaInfo],
     queue: &[i64],
@@ -150,7 +158,7 @@ pub fn queue_pane(
             ListItem::new(Line::from(spans)).style(style)
         })
         .collect();
-    let list = List::new(items).block(frame_block("Queue", focused));
+    let list = List::new(items).block(frame_block(title, focused));
     frame.render_widget(list, area);
 }
 
@@ -180,8 +188,10 @@ fn highlight_matches(text: &str, re: Option<&regex::Regex>) -> Vec<Span<'static>
     spans
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn mini_pane(
     frame: &mut Frame,
+    title: &str,
     area: Rect,
     media: &[MediaInfo],
     mini_queue: &[i64],
@@ -213,11 +223,17 @@ pub fn mini_pane(
             ListItem::new(Line::from(spans)).style(style)
         })
         .collect();
-    let list = List::new(items).block(frame_block("Queue", focused));
+    let list = List::new(items).block(frame_block(title, focused));
     frame.render_widget(list, area);
 }
 
-pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, focused: bool) {
+pub fn state_pane(
+    frame: &mut Frame,
+    title: &str,
+    area: Rect,
+    selected: Option<&MediaInfo>,
+    focused: bool,
+) {
     let mut lines = Vec::new();
     if let Some(m) = selected {
         lines.push(Line::from(format!("Title:     {}", display_name(m))));
@@ -252,7 +268,7 @@ pub fn state_pane(frame: &mut Frame, area: Rect, selected: Option<&MediaInfo>, f
         lines.push(Line::from("Nothing selected"));
     }
     let para = Paragraph::new(lines)
-        .block(frame_block("Info", focused))
+        .block(frame_block(title, focused))
         .wrap(Wrap { trim: false });
     frame.render_widget(para, area);
 }

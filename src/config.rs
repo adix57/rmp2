@@ -148,10 +148,31 @@ mod keybindings {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
+pub struct Titles {
+    pub filter: String,
+    pub queue: String,
+    pub mini: String,
+    pub info: String,
+}
+
+impl Default for Titles {
+    fn default() -> Self {
+        Titles {
+            filter: "Filter".into(),
+            queue: "Queue".into(),
+            mini: "Mini Queue".into(),
+            info: "Info".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub mpv_binary: String,
     pub volume_step: i32,
     pub seek_step: f64,
+    pub titles: Titles,
     #[serde(with = "keybindings")]
     pub keybindings: BTreeMap<String, Vec<String>>,
 }
@@ -162,6 +183,7 @@ impl Default for Config {
             mpv_binary: "mpv".into(),
             volume_step: 5,
             seek_step: 5.0,
+            titles: Titles::default(),
             keybindings: default_bindings(),
         }
     }
@@ -278,6 +300,13 @@ pub fn default_config_text() -> String {
     out.push_str("mpv_binary = \"mpv\"\n");
     out.push_str("volume_step = 5\n");
     out.push_str("seek_step = 5.0\n");
+    out.push('\n');
+    out.push_str("# Section titles used in the pane borders.\n");
+    out.push_str("[titles]\n");
+    out.push_str("filter = \"Filter\"\n");
+    out.push_str("queue = \"Queue\"\n");
+    out.push_str("mini = \"Mini Queue\"\n");
+    out.push_str("info = \"Info\"\n");
     out.push('\n');
     out.push_str("[keybindings]\n");
     for (action, keys) in default_bindings() {
@@ -470,6 +499,15 @@ mod tests {
             bindings(&cfg).get("seek_back"),
             Some(&vec!["x".to_string(), "y".to_string()])
         );
+    }
+
+    #[test]
+    fn titles_parse_with_defaults_filling_in() {
+        let cfg = Config::parse("[titles]\nqueue = \"Playlist\"\n").unwrap();
+        assert_eq!(cfg.titles.filter, "Filter");
+        assert_eq!(cfg.titles.queue, "Playlist");
+        assert_eq!(cfg.titles.mini, "Mini Queue");
+        assert_eq!(cfg.titles.info, "Info");
     }
 
     #[test]

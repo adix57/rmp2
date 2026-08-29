@@ -549,6 +549,7 @@ impl App {
             Some(s) => {
                 filter_pane(
                     frame,
+                    &self.cfg.titles.filter,
                     filter_top,
                     &s.tags,
                     self.section == Section::Filter,
@@ -556,6 +557,7 @@ impl App {
                 );
                 mini_pane(
                     frame,
+                    &self.cfg.titles.mini,
                     mini,
                     &s.all_media,
                     &s.mini_queue,
@@ -565,6 +567,7 @@ impl App {
                 );
                 queue_pane(
                     frame,
+                    &self.cfg.titles.queue,
                     queue,
                     &s.all_media,
                     &s.queue,
@@ -575,6 +578,7 @@ impl App {
                 );
                 state_pane(
                     frame,
+                    &self.cfg.titles.info,
                     state,
                     s.selected.as_ref(),
                     self.section == Section::Info,

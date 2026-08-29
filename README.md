@@ -62,6 +62,12 @@ volume_up = "K"           # uppercase = Shift
 mini_move_up = "ctrl+k"   # bound to a ctrl chord
 confirm_quit = ["q", "esc"]
 delete = "none"           # unbind a default action
+
+[titles]                  # optional pane titles
+filter = "Filter"
+queue = "Queue"
+mini = "Mini Queue"
+info = "Info"
 ```
 
 Keys: a single character (letters, digits, symbols; uppercase = shift),
