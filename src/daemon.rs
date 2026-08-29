@@ -67,7 +67,7 @@ fn now_ms() -> i64 {
 impl Daemon {
     pub fn run() -> Result<(), String> {
         let paths = Paths::resolve();
-        let cfg = Config::load(&paths.config);
+        let cfg = Config::load(&paths.config)?;
         let listener = match UnixListener::bind(&paths.sock) {
             Ok(l) => l,
             Err(_) => {

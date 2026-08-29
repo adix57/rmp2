@@ -1,70 +1,8 @@
-use crate::config::Config;
+use crate::config::{Config, action_from_str};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Action {
-    MoveUp,
-    MoveDown,
-    PrevSection,
-    NextSection,
-    CycleFocus,
-    CycleFocusBack,
-    Activate,
-    Toggle,
-    NextTrack,
-    PrevTrack,
-    VolumeUp,
-    VolumeDown,
-    SeekBack,
-    SeekFwd,
-    Repeat,
-    Shuffle,
-    AddMedia,
-    EditMedia,
-    Search,
-    Favorite,
-    AddMini,
-    FocusMini,
-    Delete,
-    MiniMoveUp,
-    MiniMoveDown,
-    ConfirmQuit,
-    Detach,
-}
-
-fn action_from_str(name: &str) -> Option<Action> {
-    Some(match name {
-        "move_up" => Action::MoveUp,
-        "move_down" => Action::MoveDown,
-        "prev_section" => Action::PrevSection,
-        "next_section" => Action::NextSection,
-        "cycle_focus" => Action::CycleFocus,
-        "cycle_focus_back" => Action::CycleFocusBack,
-        "activate" => Action::Activate,
-        "toggle" => Action::Toggle,
-        "next_track" => Action::NextTrack,
-        "prev_track" => Action::PrevTrack,
-        "volume_up" => Action::VolumeUp,
-        "volume_down" => Action::VolumeDown,
-        "seek_back" => Action::SeekBack,
-        "seek_fwd" => Action::SeekFwd,
-        "repeat" => Action::Repeat,
-        "shuffle" => Action::Shuffle,
-        "add_media" => Action::AddMedia,
-        "edit_media" => Action::EditMedia,
-        "search" => Action::Search,
-        "favorite" => Action::Favorite,
-        "add_mini" => Action::AddMini,
-        "focus_mini" => Action::FocusMini,
-        "delete" => Action::Delete,
-        "mini_move_up" => Action::MiniMoveUp,
-        "mini_move_down" => Action::MiniMoveDown,
-        "confirm_quit" => Action::ConfirmQuit,
-        "detach" => Action::Detach,
-        _ => return None,
-    })
-}
+pub use crate::config::Action;
 
 pub struct Keymap {
     map: HashMap<String, Action>,
@@ -73,9 +11,15 @@ pub struct Keymap {
 impl Keymap {
     pub fn build(cfg: &Config) -> Self {
         let mut map = HashMap::new();
-        for (key, action) in &cfg.keybindings {
-            if let Some(a) = action_from_str(action) {
-                map.insert(key.clone(), a);
+        for (action, keys) in &cfg.keybindings {
+            let Some(a) = action_from_str(action) else {
+                continue;
+            };
+            if keys.iter().any(|k| k == "none") {
+                continue;
+            }
+            for k in keys {
+                map.insert(k.clone(), a);
             }
         }
         Keymap { map }
@@ -110,6 +54,13 @@ fn key_string(key: KeyEvent) -> Option<String> {
         KeyCode::Down => Some("down".into()),
         KeyCode::Left => Some("left".into()),
         KeyCode::Right => Some("right".into()),
+        KeyCode::Home => Some("home".into()),
+        KeyCode::End => Some("end".into()),
+        KeyCode::PageUp => Some("pageup".into()),
+        KeyCode::PageDown => Some("pagedown".into()),
+        KeyCode::Insert => Some("insert".into()),
+        KeyCode::Delete => Some("delete".into()),
+        KeyCode::Backspace => Some("backspace".into()),
         KeyCode::F(n) => Some(format!("f{n}")),
         _ => None,
     }
@@ -181,6 +132,31 @@ mod tests {
         let mut e = press(KC::Char('j'), KeyModifiers::NONE);
         e.kind = crossterm::event::KeyEventKind::Repeat;
         assert!(key_string(e).is_none());
+    }
+
+    #[test]
+    fn none_unbinds_a_default_action() {
+        let raw = "[keybindings]\nmove_up = \"none\"\n";
+        let cfg = Config::parse(raw).unwrap();
+        let km = Keymap::build(&cfg);
+        assert_eq!(
+            km.resolve(press(KC::Char('j'), KeyModifiers::NONE)),
+            Some(Action::MoveDown)
+        );
+        assert_eq!(km.resolve(press(KC::Char('k'), KeyModifiers::NONE)), None);
+        assert_eq!(km.resolve(press(KC::Char('x'), KeyModifiers::NONE)), None);
+    }
+
+    #[test]
+    fn remapped_action_uses_new_key() {
+        let raw = "[keybindings]\ntoggle = \"x\"\n";
+        let cfg = Config::parse(raw).unwrap();
+        let km = Keymap::build(&cfg);
+        assert_eq!(
+            km.resolve(press(KC::Char('x'), KeyModifiers::NONE)),
+            Some(Action::Toggle)
+        );
+        assert_eq!(km.resolve(press(KC::Char(' '), KeyModifiers::NONE)), None);
     }
 
     #[test]

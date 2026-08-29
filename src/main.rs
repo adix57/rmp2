@@ -47,7 +47,13 @@ fn main() {
             }
         }
     };
-    let cfg = Config::load(&paths.config);
+    let cfg = match Config::load(&paths.config) {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = writeln!(std::io::stderr(), "rmp: {e}");
+            exit(1);
+        }
+    };
     if let Err(e) = ui::run(connection, cfg) {
         let _ = writeln!(std::io::stderr(), "rmp: {e}");
     }

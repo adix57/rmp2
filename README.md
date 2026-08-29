@@ -42,6 +42,39 @@ Everything lives under `~/.config/rmp2` (override with `RMP2_DIR`):
 - `last-state.json` - persisted volume/repeat/shuffle/active tags/position
 - `rmp.sock` / `rmp.pid` / `rmp.log` - daemon IPC + logging
 
+## Configuration
+
+`config.toml` configures the mpv binary, default steps, and every keybinding.
+On first run a commented default file is written to `~/.config/rmp2/config.toml`;
+edit it to taste. Unknown actions and malformed keys are rejected on startup
+(the TUI refuses to start). Each action maps to a key or a list of keys; set an
+action to `"none"` to unbind it.
+
+```toml
+mpv_binary = "mpv"
+volume_step = 5
+seek_step = 5.0
+
+[keybindings]
+move_down = ["j", "down"]
+move_up   = ["k", "up"]
+volume_up = "K"           # uppercase = Shift
+mini_move_up = "ctrl+k"   # bound to a ctrl chord
+confirm_quit = ["q", "esc"]
+delete = "none"           # unbind a default action
+```
+
+Keys: a single character (letters, digits, symbols; uppercase = shift),
+`"ctrl+<char>"`, `"f1"`..`"f24"`, and the named keys `"space"` `"enter"`
+`"esc"` `"tab"` `"backtab"` `"up"` `"down"` `"left"` `"right"` `"home"`
+`"end"` `"pageup"` `"pagedown"` `"insert"` `"delete"` `"backspace"`.
+
+Actions: `move_up` `move_down` `prev_section` `next_section` `cycle_focus`
+`cycle_focus_back` `activate` `toggle` `next_track` `prev_track` `volume_up`
+`volume_down` `seek_back` `seek_fwd` `repeat` `shuffle` `add_media`
+`edit_media` `search` `favorite` `add_mini` `focus_mini` `delete`
+`mini_move_up` `mini_move_down` `confirm_quit` `detach`.
+
 ## Default Keybindings
 
 Bound in `src/config.rs` (all remappable in `config.toml`):
