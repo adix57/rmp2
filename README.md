@@ -1,95 +1,140 @@
-# rmp - Rust Media Player
+# rmp
 
-A simple TUI media player backed by [mpv](https://mpv.io) (audio-only). Songs
-are categorized with a tag system; checked tags define the play queue. Supports
-both offline files and online streams (mpv/yt-dlp handles the stream).
+A simple terminal media player. Backed by [mpv](https://mpv.io) (audio-only),
+driven entirely by the keyboard. Songs are organized with tags; checked tags
+define the play queue. Plays local files and online streams alike.
+
+```
++--------------------------------------------------------------------+
+| ( Filter )            | ( Queue )                                   |
+| [x] rock    (42)      |   Alice In Chains - Nutshell                |
+| [ ] jazz    (12)      | > Metallica    - One                        |
+| [ ] podcast ( 3)      |   Nirvana      - Heart-Shaped Box           |
+| [ ] favorite(18)      |                                             |
+|                       +---------------------------------------------+
+| ( Mini Queue )        | ( Info )                                    |
+| 1. Tool - Schism      |   Title:    One                             |
++-----------------------+   Artist:   Metallica                       |
+|  3:41 / 5:29 [====---] Metallica - One             vol 100 rep off  |
++--------------------------------------------------------------------+
+```
 
 ## Features
 
-- Tag-based queue filtering: only media matching ALL checked tags play.
-- Favorite tag (`f`) to mark songs you like.
-- Repeat (`r`) cycles off -> repeat-all -> repeat-one.
-- Shuffle (`s`) plays in random order without reordering the list.
-- Regex search (`/`) over title, artist, uri, and tags.
-- Mini-queue (below the Filter pane, 35% height): `Shift+a` pins the selected
-  track so it plays next regardless of tag filters; it drains in the order
-  added before the regular queue continues.
-- Mouse: click a section to focus it, click a tag/media to select, double-click
-  media to play, click `rep`/`shf` in the status bar to toggle repeat/shuffle.
-- Background daemon: `Shift+q` detaches while playback continues; reattach by
-  running `rmp` again. `q`/`esc` (with confirmation) shuts the daemon down.
-- Configurable keybindings via `config.toml`.
-- Metadata pulled directly from mpv properties (no metadata crate).
+- Tag-based queue filtering: media matching ALL checked tags play.
+- Favorite tag to mark the songs you like.
+- Repeat (off -> all -> one) and shuffle without reordering the list.
+- Regex search over title, artist, uri, and tags.
+- Mini-queue: pin a track with `Shift+a` so it plays next regardless of tag
+  filters; it drains in order before the regular queue resumes.
+- Mouse support: click to focus/select, double-click to play, click `rep`/`shf`
+  in the status bar to toggle repeat/shuffle.
+- Background daemon: detach the TUI with `Shift+q` and playback keeps going;
+  reattach by running `rmp` again.
+- Fully configurable keybindings and pane titles (see [CONFIG.md](CONFIG.md)).
+- Metadata pulled straight from mpv properties - no metadata crate.
 
-## Requirements
+## Getting Started
 
-- [mpv](https://mpv.io)
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for online streams
-- A Rust toolchain (edition 2024) to build.
-
-## Build & Run
+The quickest way to try it:
 
 ```sh
-cargo build --release
-rmp              # starts the daemon if needed, then opens the TUI
-rmp --daemon     # headless background server only
+cargo build --release          # see INSTALL.md for per-OS setup
+rmp                           # spawns the daemon once, then opens the TUI
 ```
 
-Everything lives under `~/.config/rmp2` (override with `RMP2_DIR`):
+Press `a`, enter a path or stream URL, confirm, and `Enter` to play the
+selected track. Toggle tags with `space` (or `Enter`) in the Filter pane to
+shape the queue. `Esc` (after confirming) stops the daemon; `Shift+q` leaves it
+running in the background.
 
-- `config.toml` - keybinds, mpv binary, defaults
-- `library.sqlite3` - media library DB
-- `last-state.json` - persisted volume/repeat/shuffle/active tags/position
-- `rmp.sock` / `rmp.pid` / `rmp.log` - daemon IPC + logging
+See [INSTALL.md](INSTALL.md) for installing `mpv`/`yt-dlp` and building on
+Linux, macOS, or WSL.
+
+## Prerequisites
+
+- [mpv](https://mpv.io)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - for online streams
+- A [Rust](https://rustup.rs) toolchain (edition 2024) to build
+
+## Installing
+
+Installation is from source for now. Full instructions for Linux, macOS, and
+Windows (WSL), plus an optional daemon autostart: **[INSTALL.md](INSTALL.md)**.
+
+## Usage
+
+Everything below can be rebound; keybindings and pane titles are configured in
+`config.toml` - see [CONFIG.md](CONFIG.md).
+
+The interface has four sections: Filter (tags), Queue (playlist), Mini Queue,
+and Info (details). `Tab` / `h` / `l` move focus between them.
+
+| Key           | Action                                        |
+| ------------- | --------------------------------------------- |
+| `Enter`       | Play selected                                 |
+| `Space`       | Play/pause (queue) or toggle tag (filter)     |
+| `j` / `k`     | Move cursor (also `up`/`down`)                |
+| `n` / `p`     | Next / previous track                         |
+| `r` / `s`     | Repeat cycle / shuffle toggle                 |
+| `/`           | Regex search                                  |
+| `a` / `A`     | Add media / pin to mini-queue                 |
+| `e` / `f`     | Edit selected / toggle favorite               |
+| `b`           | Jump to/from the mini-queue                   |
+| `d`           | Delete (confirm in main queue)                |
+| `Ctrl+k` / `Ctrl+j`| Move mini-queue item up / down             |
+| `J` / `K`     | Volume down / up                              |
+| `H` / `L`     | Seek backward / forward                       |
+| `q` / `esc`   | Quit (with confirmation)                      |
+| `Shift+q`     | Detach; playback continues in the daemon      |
+
+The daemon is a separate headless process that owns playback, the library, and
+the queue. It starts automatically on first `rmp` launch and lives at
+`~/.config/rmp2/` (`config.toml`, `library.sqlite3`, `last-state.json`, and
+`rmp.sock` / `rmp.pid` / `rmp.log`). Override the location with `RMP2_DIR`.
+
+## Architecture and Crate Ecosystem
+
+A single binary with two modes. `rmp --daemon` runs a headless server: it owns
+the `mpv` subprocess (driven over its JSON IPC socket), the SQLite library,
+and the queue/playback engine, and exposes a JSON protocol over a Unix socket.
+Plain `rmp` spawns the daemon if needed, then runs a thin TUI client that
+forwards keys and renders daemon state snapshots. `Shift+q` detaches; only a
+confirmed `q`/`esc` shuts the daemon down.
+
+Source layout:
+
+| Path                | Responsibility                                        |
+| ------------------- | ----------------------------------------------------- |
+| `src/daemon.rs`     | Socket server, queue/playback engine, mpv lifecycle   |
+| `src/mpv.rs`        | mpv subprocess + JSON-RPC IPC client                  |
+| `src/db.rs`         | SQLite schema + queries (rusqlite bundled)            |
+| `src/engine.rs`     | Pure queue/tag filtering and repeat/shuffle logic     |
+| `src/proto.rs`      | JSON protocol messages shared by daemon and TUI       |
+| `src/ui/`           | ratatui app shell, keymap + configurable bindings     |
+| `src/config.rs`     | Config parsing, defaults, key/action validation       |
+| `src/state.rs`      | Persisted last-state (volume/repeat/shuffle/tags)     |
+
+Crates:
+
+| Crate              | Role                                        |
+| ------------------ | ------------------------------------------- |
+| `ratatui`          | Terminal UI rendering and layout            |
+| `crossterm`        | Raw terminal, key/mouse input               |
+| `rusqlite`         | SQLite library (bundled)                    |
+| `serde`+`serde_json`| JSON protocol + state serialization        |
+| `toml`             | `config.toml` parsing                       |
+| `regex`            | Search filtering                           |
+| `signal-hook`      | Daemon shutdown signal handling             |
 
 ## Configuration
 
-`config.toml` configures the mpv binary, default steps, and every keybinding.
-On first run a commented default file is written to `~/.config/rmp2/config.toml`;
-edit it to taste. Unknown actions and malformed keys are rejected on startup
-(the TUI refuses to start). Each action maps to a key or a list of keys; set an
-action to `"none"` to unbind it.
+All configuration lives in `config.toml` under the config directory - options,
+pane titles, and every keybinding. See **[CONFIG.md](CONFIG.md)** for the full
+reference (keys syntax, actions, defaults) and an annotated example file. A
+commented default `config.toml` is also generated on first run.
 
-```toml
-mpv_binary = "mpv"
-volume_step = 5
-seek_step = 5.0
+## Contributing
 
-[keybindings]
-move_down = ["j", "down"]
-move_up   = ["k", "up"]
-volume_up = "K"           # uppercase = Shift
-mini_move_up = "ctrl+k"   # bound to a ctrl chord
-confirm_quit = ["q", "esc"]
-delete = "none"           # unbind a default action
-
-[titles]                  # optional pane titles
-filter = "Filter"
-queue = "Queue"
-mini = "Mini Queue"
-info = "Info"
-```
-
-Keys: a single character (letters, digits, symbols; uppercase = shift),
-`"ctrl+<char>"`, `"f1"`..`"f24"`, and the named keys `"space"` `"enter"`
-`"esc"` `"tab"` `"backtab"` `"up"` `"down"` `"left"` `"right"` `"home"`
-`"end"` `"pageup"` `"pagedown"` `"insert"` `"delete"` `"backspace"`.
-
-Actions: `move_up` `move_down` `prev_section` `next_section` `cycle_focus`
-`cycle_focus_back` `activate` `toggle` `next_track` `prev_track` `volume_up`
-`volume_down` `seek_back` `seek_fwd` `repeat` `shuffle` `add_media`
-`edit_media` `search` `favorite` `add_mini` `focus_mini` `delete`
-`mini_move_up` `mini_move_down` `confirm_quit` `detach`.
-
-## Default Keybindings
-
-Bound in `src/config.rs` (all remappable in `config.toml`):
-
-- `Enter` play selected, `Space` play/pause, `j`/`k` navigate, `h`/`l` cycle panes
-- `n`/`p` next/previous, `r` repeat cycle, `s` shuffle
-- `a` add media, `e` edit media, `f` toggle favorite
-- `Shift+a` add selected media to the mini-queue (exception list), `b` toggle focus to/from it
-- `d` delete (confirm in main queue; from the mini-queue removes without confirmation)
-- `Ctrl+j`/`Ctrl+k` reorder the selected mini-queue item down/up
-- `/` search, `Shift+h`/`Shift+l` or `left`/`right` seek backward/forward (5s)
-- `Tab` cycle sections, `q`/`esc` quit (confirm), `Shift+q` detach to background
+Contributions are welcome! Please feel free to submit a Pull Request. For major
+changes, please open an issue first to discuss what you would like to change.
